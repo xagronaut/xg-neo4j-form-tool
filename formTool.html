@@ -13,14 +13,41 @@
 	<!-- Angular (CDN) -->
 	<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.2/angular.js"></script>
 	<!-- Bootstrap (CDN) -->
-	<script type='text/javascript' src='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js'></script>
-	<link type='text/css' rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css' />
+	<script type='text/javascript' src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js'></script>
+	<link type='text/css' rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css' />
+	
+	<script type='text/javascript' src='./lib/cypher.js'></script>
+	<script type='text/javascript' src='./lib/highlight/highlight.pack.js'></script>
+	<!-- <link rel="stylesheet" href="./lib/highlight/styles/default.css"> -->
+	<link rel="stylesheet" href="./lib/highlight/styles/github-gist.css">
+	<link type='text/css' rel='stylesheet' href='./css/cypher.css'>
+	
+	<script type='text/javascript'>
+		(function(hljs){
+			if(!hljs) {
+				console.log('Could not find highlight.js object!');
+				return;
+			}
+
+			hljs.registerLanguage("cypher", cypher);
+		})(window.hljs);
+	</script>
+	
 	<script type='text/javascript'>
 	(function(window, $, undefined) {
-
+		var maxId = 0;
+		
 		var app = angular.module('Neo4jFormTool', []);
 	
 		app.controller('Neo4jFormToolCtrl', ['$scope', '$sce', Neo4jFormToolCtrl]);
+		
+		app.filter('highlight', function($sce) {
+			return function(input, lang) {
+				if (lang && input) return hljs.highlight(lang, input).value;
+					return input;
+				}
+			})
+			.filter('unsafe', function($sce) { return $sce.trustAsHtml; });
 		
 		function Neo4jFormToolCtrl($scope, $sce) {
 			$scope = $scope || {};
@@ -68,19 +95,38 @@
 							}
 						}
 					],
-					"relationships" : [],
-					"relationshipTypeList" : "",
-					"relationshipTypes" : {}
+					"relationships" : [
+						{ "sourceId" : 0, "targetId": 1, "relationshipType": "MEMBER_OF", "properties": {} }
+					],
+					"relationshipTypeList" : null,
+					"relationshipTypes" : {
+						"MEMBER_OF": {}
+					}
 				};
 			}
 
-			var propertyTypes = $scope.propertyTypes || ($scope.propertyTypes = [ "string", "integer", "float"]);
+			var form = initForm();
 
-			var form = $scope.form = ($scope.form || getDefaultForm());
+			function setDefaultSelections() {
+				$scope.selectedSourceNodeId = $scope.form.nodes.length ? $scope.form.nodes[0].id : null;
+				$scope.selectedTargetNodeId = $scope.form.nodes.length ? $scope.form.nodes[0].id : null;
+				var relationshipTypeKeys = Object.keys($scope.form.relationshipTypes);
+				$scope.selectedRelationshipType = (relationshipTypeKeys.length && relationshipTypeKeys[0]) || null;
+			}
 			
-			var labelList = $scope.form.labelList || ($scope.form.labelList = $scope.form.labels.join('\n'));
-			
-			var relationshipTypeList = $scope.form.relationshipTypeList || ($scope.form.relationshipTypeList = Object.keys(form.relationshipTypes).join('\n'));
+			function initForm() {
+				$scope.form = getDefaultForm();
+				$scope.propertyTypes = [ "string", "integer", "float"];
+				// build label list
+				$scope.form.labelList || ($scope.form.labelList = $scope.form.labels.join('\n'));
+				// build relationship type list
+				$scope.form.relationshipTypeList = Object.keys($scope.form.relationshipTypes).join('\n');
+				maxId = $scope.form.nodes.length;
+				
+				setDefaultSelections();
+				
+				return $scope.form;
+			}
 			
 			function keysToTextBlock(obj) { return Object.keys(obj || {}).map(function(key) { return (key || ''); }).join('\n'); }
 			
@@ -89,17 +135,78 @@
 					obj[key] : ((obj = obj || {}) && (obj[key] = defaultValue));
 			}
 			
-			function loadForm () {
-				// load form from local storage
+			function getNodeById(nodeId) {
+				var matches = form.nodes.filter(function(item) { return item.id == nodeId; });
+				return matches.length ? matches[0] : null;
 			}
 			
-			function saveForm () {
-				// save form to local storage
+			$scope.loadForm = function() {
+				// load form from local storage
+				if(!window.localStorage) return;
+				var loadedForm = JSON.parse(localStorage.getItem('formData'));
+				form = $scope.form = loadedForm;
+				
+				setDefaultSelections();
 			}
+			
+			$scope.saveForm = function() {
+				// save form to local storage
+				if(!window.localStorage) return;
+				localStorage.setItem('formData', JSON.stringify(form));
+			}
+			
+			$scope.resetForm = function() {
+				if(confirm('Do you really want to reset the form tool?')) {
+					form = initForm();
+				}
+			}
+			
+			$scope.addNode = function(label) {
+				var nodeType = form.nodeTypes[label];
+				if(nodeType) {
+					var defaultProperties = {};
+					// set default values for new node
+					Object.keys(nodeType.fields).forEach(function(key) { var fieldDef = nodeType.fields[key]; defaultProperties[key] = (fieldDef.type == "integer" ? 0 : fieldDef.type == "float" ? 0.0 : ""); });
+					var newNode = { "id": maxId++, "label": label, "properties":  defaultProperties };
+					form.nodes.push(newNode);
+				}
+				return null;
+			};
+			
+			$scope.addRelationship = function() {
+				var sourceId = $scope.selectedSourceNodeId,
+					targetId = $scope.selectedTargetNodeId,
+					relationshipType = $scope.selectedRelationshipType;
+			
+				alert('what?');
+				console.dir($scope);
+				console.log(sourceId);
+				console.log(relationshipType);
+				console.log(targetId);
+				
+				debugger;
+
+				form.relationships.push({
+					"sourceId" : sourceId,
+					"sourceNode": getNodeById(sourceId),
+					"relationshipType": relationshipType,
+					"targetId": targetId,
+					"targetNode": getNodeById(targetId),
+					"properties": {}
+				});
+			};
 			
 			$scope.getNodesByLabel = function(labelName) {
 				return form.nodes.filter(function(item) { return (item && item.label == labelName); });
 			}
+			
+			$scope.getRelationshipData = function(relationships) {
+				return relationships.map(function(item) {
+					item.sourceNode = getNodeById(item.sourceId);
+					item.targetNode = getNodeById(item.targetId);
+					return item;
+				});
+			};
 			
 			$scope.getLabels = function () { return (form.labels || []).map(function(item){ return item || ''; }).join('\n'); };
 			
@@ -113,18 +220,59 @@
 				return matchingProperties.map(function(key) { return `\`${key}\` : "${properties[key]}"`; }).join(', ');
 			};
 			
+			$scope.getMergeStatement = function(node) {
+				return `// Merge ${node.label} #${node.id}\nMERGE (n${node.id}:${node.label} { ${$scope.getMatchingProperties(node)} })${$scope.getSetPropertiesClause(node)}\nRETURN n${node.id};`;
+			};
+			
+			$scope.getMatchStatement = function(node) {
+				return `// Match ${node.label} #${node.id}\nMATCH (n${node.id}:${node.label} { ${$scope.getMatchingProperties(node)} })\nRETURN n${node.id};`;
+			};
+			
+			$scope.getNodeJson = function(node) {
+				return JSON.stringify(node, null, ' ');
+			}
+			
+			$scope.getFormData = function() {
+				return JSON.stringify(form, null, ' ');
+			}
+			
+			function joinTextSegments(segments, delimiter) {
+				return segments.filter(function(item) { return !(!(item)); }).join(delimiter);
+			}
+			
+			$scope.getCreateScript = function() {
+				var script = '// Create nodes and relationships\nCREATE ';
+
+				var nodeIds = [], relationshipIds = [];
+				
+				var createNodeStatements = form.nodes.map(function(node) {
+					var nodeId = `n${node.id}`;
+					nodeIds.push(nodeId);
+					
+					return `(n${node.id}:${node.label} { ${$scope.getMatchingProperties(node)} })${$scope.getSetPropertiesClause(node)}`;
+				}).join(',\n\t');
+				
+				var createRelationshipStatements = form.relationships.map(function(relationship, index) {
+					var relationshipId = `r${index}`;
+					relationshipIds.push(relationshipId);
+					return `(n${relationship.sourceId})-[r${index}:${relationship.relationshipType}]->(n${relationship.targetId})`;
+				}).join(',\n\t');
+				
+				var returnStatement = `\nRETURN DISTINCT ${nodeIds.concat(relationshipIds).join(', ')};`;
+				
+				var finalStatement = '// Create nodes and relationships\nCREATE ' + joinTextSegments([createNodeStatements, createRelationshipStatements], ',\n\t') + returnStatement;
+				
+				return finalStatement;
+			};
+			
 			$scope.getSetPropertiesClause = function(node) {
 				var properties = (node && (node.properties || (node.properties = {})));
 				
 				var setOnlyProperties = Object.keys(properties).filter(function(propName) { return !(form.nodeTypes[node.label].fields[propName].matchOn || false); });
 				
-				return setOnlyProperties.length ? "SET " + setOnlyProperties.map(function(key) { return `n.\`${key}\` = "${properties[key]}"`; }).join(',\n\t') : '';
+				return setOnlyProperties.length ? "\n\tSET " + setOnlyProperties.map(function(key) { return `n${node.id}.\`${key}\` = "${properties[key]}"`; }).join(',\n\t') : '';
 			};
-						
-			function addNodeType(nodeTypeName) {
-				//$scope.nodeTypes && $.extend({}, $scope.nodeTypes[nodeTypeName]
-			}
-			
+
 			$scope.updateLabelList = function () {
 				var labels = (form.labelList || '').trim().split(/\r?\n/);
 				
@@ -140,8 +288,6 @@
 
 				var fieldList = (nodeType.fieldList || '').trim().split(/\r?\n/);
 				
-				console.dir(fieldList);
-				
 				for(var fieldIndex=0; fieldIndex < fieldList.length; fieldIndex++) {
 					var fieldName = fieldList[fieldIndex];
 					var field = fields[fieldName] || (fields[fieldName] = { "type": "string", "matchOn" : false });
@@ -149,53 +295,169 @@
 			};
 			
 			$scope.updateRelationshipTypeList = function () {
-				var relationshipTypes = (form.relationshipTypeList || '').trim().split(/\r?\n/);
+				var relationshipTypeItems = (form.relationshipTypeList || '').trim().split(/\r?\n/);
 				
 				if(confirm('Would you like to replace the existing relationship types?')) {
-					form.relationshipTypes = relationshipTypes;
+					for(var relTypeIndex=0; relTypeIndex < relationshipTypeItems.length; relTypeIndex++) {
+						var relTypeName = relationshipTypeItems[relTypeIndex];
+						var relationshipType = form.relationshipTypes[relTypeName] || (form.relationshipTypes[relTypeName] = {});
+					}
 				}
 			};
 		}
 	
 	}(window, window.jQuery));
 	</script>
+	<style>
+		body {
+			margin-left: 15px;
+			margin-right: 15px;
+			font-size: 14pt;
+		}
+		
+		.nav-item.active {
+			font-weight: bold;
+			font-size: 1.5em;
+		}
+		
+		.tab-pane {
+			margin-right: 15px;
+			margin-left: 15px;
+			margin-top: 10px;
+		}
+		
+		pre.medium-box {
+			max-height: 400px;
+			overflow: auto;
+			background-color: #FAFAFA;
+		}
+		
+		.normal-print {
+			font-size: 1rem;
+		}
+		
+		pre {
+			border: 1px solid #999999;
+			padding: 3px;
+		}
+		
+		pre code {
+			font-size: 2em;
+		}
+		
+		.no-bullet {
+			list-style-type: none;
+		}
+		
+		label {
+			font-size: 1.5rem;
+		}
+	</style>
 </head>
 <body ng-app='Neo4jFormTool' ng-controller='Neo4jFormToolCtrl'>
 	<h1>Neo4j Form Tool</h1>
-	<div style="vertical-align: top !important;">
-		<div class="setup-tab" style="display: inline-block; vertical-align: top; padding-right: 20px; margin-right: 20px; border-right: 1px solid black;">
-			<h2>Setup</h2>
-			<label for="labels">Labels:</label><br />
-			<textarea id="labels" rows="7" ng-model="form.labelList" ng-model-options="{ debounce: 1000 }" ng-change="updateLabelList()"></textarea><br />
-			<label for="relationshipTypes">Relationship Types:</label><br />
-			<textarea id="relationshipTypes" ng-model="form.relationshipTypeList" ng-model-options="{ debounce: 1000 }" ng-change="updateRelationshipTypeList()"></textarea>
-		</div>
-		<section id="labelRepeater" style="display: inline-block;">
-			<h2>Nodes</h2>
-			<div class="node-type-tab" ng-repeat="lbl in form.labels" style="display: inline-block; vertical-align: top;">
-				<h3>Label: {{lbl}}</h3>
-				<p style="vertical-align: top;"><label>Fields:</label><br /><textarea rows="4" ng-model="form.nodeTypes[lbl].fieldList" ng-model-options="{ debounce: 1000 }" ng-change="updateNodeTypeFieldList(lbl)">{{getFields(lbl)}}</textarea></p>
-				<h4>Structure</h4>
-				<ul>
-					<li ng-repeat="(key, value) in form.nodeTypes[lbl].fields">
-						<div class="fieldEditor"><label>{{key}}:</label><select rows="1" ng-model="value.type"><option ng-repeat="propType in propertyTypes">{{propType}}</option></select>&nbsp;<label>Use for matching?</label><input type="checkbox" ng-model="value.matchOn" /></div>
-					</li>
-				</ul>
-				<h3>Nodes</h3>
-				<ul>
-					<li ng-repeat="node in getNodesByLabel(lbl)">
-						<div style="display: inline-block;">Id# {{node.id}} &raquo; </div>
-						<div style="display: inline-block;" ng-repeat="(fldName, fldValue) in form.nodeTypes[lbl].fields">
-							<label>{{fldName}}:</label>&#160;<input type="text" ng-model="node.properties[fldName]" />&#160;
-						</div>
-						<pre><code>
-MERGE (n:{{lbl}} { {{getMatchingProperties(node)}} }) {{ getSetPropertiesClause(node) }} RETURN n;
-						</code></pre>
-						<pre>{{node}}</pre>
-					</li>
-				</ul>
+	<div class="container-fluid">
+		<ul class="nav nav-tabs" id="myTabs" role="tablist">
+			<li class="nav-item"><a class="nav-link" id="Setup-tab" href="#Setup" data-toggle="tab" aria-controls="Setup" aria-selected="true" role="tab">Setup</a></li>
+			<li class="nav-item"><a class="nav-link" id="Nodes-tab" href="#Nodes" data-toggle="tab" aria-controls="Nodes" aria-selected="true" role="tab">Nodes</a></li>
+			<li class="nav-item"><a class="nav-link" id="Relationships-tab" href="#Relationships" data-toggle="tab" aria-controls="Relationships" aria-selected="false" role="tab">Relationships</a></li>
+			<li class="nav-item"><a class="nav-link" id="Script-tab" href="#Script" data-toggle="tab" aria-controls="Script" aria-selected="false" role="tab">Script</a></li>
+			<li class="nav-item"><a class="nav-link" id="FormData-tab" href="#FormData" data-toggle="tab" aria-controls="FormData" aria-selected="false" role="tab">Form Data</a></li>
+		</ul>
+		<div class="tab-content" id="myTabsContent">
+			<div class="tab-pane active" id="Setup" role="tabpanel">
+				<h2 class="panel-heading">Setup</h2>
+				<label for="labels">Labels:</label><br />
+				<textarea id="labels" rows="7" ng-model="form.labelList" ng-model-options="{ debounce: 1000 }" ng-change="updateLabelList()"></textarea><br />
+				<label for="relationshipTypes">Relationship Types:</label><br />
+				<textarea id="relationshipTypes" rows="4" ng-model="form.relationshipTypeList" ng-model-options="{ debounce: 1000 }" ng-change="updateRelationshipTypeList()"></textarea>
 			</div>
-		</section>
+			<div class="tab-pane" id="Nodes" role="tabpanel">
+				<div class="row">
+					<div class="col-1">
+						<div class="list-group" id="list-tab" role="tablist">
+							<a class="list-group-item list-group-item-action" ng-repeat="lbl in form.labels" id="list-{{lbl}}-list" href="#list-{{lbl}}" data-toggle="list" role="tab" aria-controls="{{lbl}}">{{lbl}}</a>
+						</div>
+					</div>
+					<div class="col-11">
+						<div class="tab-content" id="nav-tabContent">
+							<div class="tab-pane fade" id="list-{{lbl}}" ng-repeat="lbl in form.labels" role="tabpanel" aria-labelledby="list-{{lbl}}-list">
+								<h2 class="panel-heading">{{lbl}}</h2>
+								<div class="row" style="vertical-align: top;">
+									<div class="col-2"><label>Fields:</label><br /><textarea rows="3" ng-model="form.nodeTypes[lbl].fieldList" ng-model-options="{ debounce: 1000 }" ng-change="updateNodeTypeFieldList(lbl)">{{getFields(lbl)}}</textarea></div>
+									<div class="col-10">
+										<h4>Structure</h4>
+										<div class="table-responsive">
+											<table class="table table-striped table-hover">
+												<thead>
+													<tr><th>Field name</th><th>Type</th><th>Use for match?</th></tr>
+												</thead>
+												<tbody>
+													<tr ng-repeat="(key, value) in form.nodeTypes[lbl].fields"><td>{{key}}</td><td><select rows="1" ng-model="value.type"><option ng-repeat="propType in propertyTypes">{{propType}}</option></select></td><td><input type="checkbox" ng-model="value.matchOn" /></td></tr>
+												</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+								<h3>Nodes <button class="btn btn-primary" title="Add node" ng-click="addNode(lbl)">+Add Node</button></h3>
+								<ul>
+									<li class="table-responsive" ng-repeat="node in getNodesByLabel(lbl)">
+										<table class="table table-striped table-hover" cellspacing="3">
+											<thead>
+												<tr><th>Id#</th><th ng-repeat="(fldName, fldValue) in form.nodeTypes[lbl].fields">{{fldName}}</th></tr>
+											</thead>
+											<tbody>
+												<tr><td>{{node.id}}</td><td ng-repeat="(fldName, fldValue) in form.nodeTypes[lbl].fields"><input type="text" ng-model="node.properties[fldName]" /></td></tr>
+											</tbody>
+										</table>
+										<ul class="nav nav-tabs" role="tablist" id="{{lbl}}StatementsTabs">
+											<li class="nav-item">
+												<a class="nav-link" id="{{lbl}}Merge-tab" data-toggle="tab" role="tab" href="#{{lbl}}Merge" aria-controls="{{lbl}}Merge" aria-selected="true">MERGE</a>
+											</li>
+											<li class="nav-item">
+												<a class="nav-link" id="{{lbl}}Match-tab" data-toggle="tab" role="tab" href="#{{lbl}}Match" aria-controls="{{lbl}}Match" aria-selected="true">MATCH</a>
+											</li>
+											<li class="nav-item">
+												<a class="nav-link" id="{{lbl}}NodeData-tab" data-toggle="tab" role="tab" href="#{{lbl}}NodeData" aria-controls="{{lbl}}NodeData" aria-selected="true">Node Data</a>
+											</li>
+										</ul>
+										<div class="tab-content" id="{{lbl}}Statements">
+											<pre class="tab-pane active" id="{{lbl}}Merge" role="tabpanel" aria-labelledby="{{lbl}}Merge-tab"><code ng-bind-html="getMergeStatement(node) | highlight:'cypher' | unsafe" class="cypher"></code></pre>
+											<pre class="tab-pane" id="{{lbl}}Match" role="tabpanel" aria-labelledby="{{lbl}}Merge-tab"><code ng-bind-html="getMatchStatement(node) | highlight:'cypher' | unsafe" class="cypher"></code></pre>
+											<pre class="tab-pane" id="{{lbl}}NodeData" role="tabpanel" aria-labelledby="{{lbl}}NodeData-tab"><code ng-bind-html="getNodeJson(node) | highlight:'json' | unsafe" class="json"></code></pre>
+										</div>
+									</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="tab-pane" id="Relationships" role="tabpanel" aria-labelledby="Relationships-tab">
+				<h2>Relationships</h2>
+				<select id="sourceNode" rows="1" ng-model="selectedSourceNodeId"><option ng-repeat="sourceNode in form.nodes" value="{{id}}">[{{sourceNode.id}}] {{sourceNode.properties.name}} : {{sourceNode.label}}</option></select>
+				<select id="relationshipType" rows="1" ng-model="selectedRelationshipType"><option ng-repeat="(relTypeName, relTypeValue) in form.relationshipTypes" value="{{relTypeName}}">{{relTypeName}}</option></select>
+				<select id="targetNode" rows="1" ng-model="selectedTargetNodeId"><option ng-repeat="targetNode in form.nodes" value="{{id}}">[{{targetNode.id}}] {{targetNode.properties.name}} : {{targetNode.label}}</option></select>
+				<button class="btn btn-primary" ng-click="addRelationship()">Add relationship</button><br />
+				<div class="table-responsive">
+					<table class="table table-striped table-hover">
+						<thead>
+							<tr><th>Source</th><th>Relationship</th><th>Target</th></tr>
+						</thead>
+						<tbody>
+							<tr ng-repeat="rel in getRelationshipData(form.relationships)"><td>{{rel.sourceNode.properties.name}}&#160;(:{{rel.sourceNode.label}})</td><td>-[&#160;:{{rel.relationshipType}}&#160;]-&gt;</td><td>{{rel.targetNode.properties.name}}&#160;(:{{rel.targetNode.label}})</td></tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div class="tab-pane" id="Script" role="tabpanel" aria-labelledby="Script-tab">
+				<pre><code ng-bind-html="getCreateScript() | highlight:'cypher' | unsafe" class="cypher"></code></pre>
+			</div>
+			<div class="tab-pane" id="FormData" role="tabpanel" aria-labelledby="FormData-tab">
+				<pre class="medium-box normal-print"><code ng-bind-html="getFormData() | highlight:'json' | unsafe"></code></pre><br />
+				<button class="btn btn-primary" ng-click="saveForm()">Save Form Data</button>&#160;<button class="btn" ng-click="loadForm()">Load Form Data</button>&#160;<button class="btn btn-danger" ng-click="resetForm()">Reset Form Data</button>
+			</div>
+		</div>
 	</div>
 </body>
 </html>
