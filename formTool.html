@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Neo4j Form Tool</title>
+	<!-- Author: Jeffrey A. Miller, @xagronaut, 2018 -->
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- jQuery (CDN) -->
+	<!-- jQuery v2.x (CDN) -->
+	<!-- <script type='text/javascript' src='https://code.jquery.com/jquery-2.1.4.js'></script> -->
+	<!-- jQuery v1.x (CDN) (for Internet Explorer compatibility) -->
+	<script type='text/javascript' src='https://code.jquery.com/jquery-1.11.3.js'></script>
+	<script type='text/javascript' src='https://code.jquery.com/ui/1.11.3/jquery-ui.js'></script>
+	<!-- Angular (CDN) -->
+	<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.2/angular.js"></script>
+	<!-- Bootstrap (CDN) -->
+	<script type='text/javascript' src='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js'></script>
+	<link type='text/css' rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css' />
+	<script type='text/javascript'>
+	(function(window, $, undefined) {
+
+		var app = angular.module('Neo4jFormTool', []);
+	
+		app.controller('Neo4jFormToolCtrl', ['$scope', '$sce', Neo4jFormToolCtrl]);
+		
+		function Neo4jFormToolCtrl($scope, $sce) {
+			$scope = $scope || {};
+			
+			function getDefaultForm() {
+				return {
+					"labelList" : "",
+					"labels" : [
+						"Person",
+						"Team"
+					],
+					"nodeTypes" : {
+						"Person": {
+							"fieldList" : "name",
+							"fields": {
+								"name": {
+									"type": "string",
+									"matchOn": true
+								}
+							}
+						},
+						"Team": {
+							"fieldList" : "name",
+							"fields": {
+								"name": {
+									"type": "string",
+									"matchOn": true
+								}
+							}
+						}
+					},
+					"nodes" : [
+						{
+							"id": 0,
+							"label": "Person",
+							"properties" : {
+								"name": "Product Owner"
+							}
+						},
+						{
+							"id": 1,
+							"label": "Team",
+							"properties" : {
+								"name": "Product Team"
+							}
+						}
+					],
+					"relationships" : [],
+					"relationshipTypeList" : "",
+					"relationshipTypes" : {}
+				};
+			}
+
+			var propertyTypes = $scope.propertyTypes || ($scope.propertyTypes = [ "string", "integer", "float"]);
+
+			var form = $scope.form = ($scope.form || getDefaultForm());
+			
+			var labelList = $scope.form.labelList || ($scope.form.labelList = $scope.form.labels.join('\n'));
+			
+			var relationshipTypeList = $scope.form.relationshipTypeList || ($scope.form.relationshipTypeList = Object.keys(form.relationshipTypes).join('\n'));
+			
+			function keysToTextBlock(obj) { return Object.keys(obj || {}).map(function(key) { return (key || ''); }).join('\n'); }
+			
+			function getOrAssignKey(obj, key, defaultValue) {
+				return (obj && obj[key]) ?
+					obj[key] : ((obj = obj || {}) && (obj[key] = defaultValue));
+			}
+			
+			function loadForm () {
+				// load form from local storage
+			}
+			
+			function saveForm () {
+				// save form to local storage
+			}
+			
+			$scope.getNodesByLabel = function(labelName) {
+				return form.nodes.filter(function(item) { return (item && item.label == labelName); });
+			}
+			
+			$scope.getLabels = function () { return (form.labels || []).map(function(item){ return item || ''; }).join('\n'); };
+			
+			$scope.getFields = function (nodeTypeName) { var nodeType = getOrAssignKey(form.nodeTypes, nodeTypeName, { "fields" : {} }), fields = nodeType.fields || {}; return keysToTextBlock(fields); };
+			
+			$scope.getMatchingProperties = function(node) {
+				var properties = (node && (node.properties || (node.properties = {})));
+				
+				var matchingProperties = Object.keys(properties).filter(function(propName) { return form.nodeTypes[node.label].fields[propName].matchOn || false; });
+				
+				return matchingProperties.map(function(key) { return `\`${key}\` : "${properties[key]}"`; }).join(', ');
+			};
+			
+			$scope.getSetPropertiesClause = function(node) {
+				var properties = (node && (node.properties || (node.properties = {})));
+				
+				var setOnlyProperties = Object.keys(properties).filter(function(propName) { return !(form.nodeTypes[node.label].fields[propName].matchOn || false); });
+				
+				return setOnlyProperties.length ? "SET " + setOnlyProperties.map(function(key) { return `n.\`${key}\` = "${properties[key]}"`; }).join(',\n\t') : '';
+			};
+						
+			function addNodeType(nodeTypeName) {
+				//$scope.nodeTypes && $.extend({}, $scope.nodeTypes[nodeTypeName]
+			}
+			
+			$scope.updateLabelList = function () {
+				var labels = (form.labelList || '').trim().split(/\r?\n/);
+				
+				if(confirm('Would you like to replace the existing labels?')) {
+					form.labels = labels;
+				}
+			};
+			
+			$scope.updateNodeTypeFieldList = function (nodeTypeName) {
+				var nodeType = form.nodeTypes[nodeTypeName] || (form.normTypes[nodeTypeName] = {});
+
+				var fields = nodeType.fields || (nodeType.fields = {});
+
+				var fieldList = (nodeType.fieldList || '').trim().split(/\r?\n/);
+				
+				console.dir(fieldList);
+				
+				for(var fieldIndex=0; fieldIndex < fieldList.length; fieldIndex++) {
+					var fieldName = fieldList[fieldIndex];
+					var field = fields[fieldName] || (fields[fieldName] = { "type": "string", "matchOn" : false });
+				}
+			};
+			
+			$scope.updateRelationshipTypeList = function () {
+				var relationshipTypes = (form.relationshipTypeList || '').trim().split(/\r?\n/);
+				
+				if(confirm('Would you like to replace the existing relationship types?')) {
+					form.relationshipTypes = relationshipTypes;
+				}
+			};
+		}
+	
+	}(window, window.jQuery));
+	</script>
+</head>
+<body ng-app='Neo4jFormTool' ng-controller='Neo4jFormToolCtrl'>
+	<h1>Neo4j Form Tool</h1>
+	<div style="vertical-align: top !important;">
+		<div class="setup-tab" style="display: inline-block; vertical-align: top; padding-right: 20px; margin-right: 20px; border-right: 1px solid black;">
+			<h2>Setup</h2>
+			<label for="labels">Labels:</label><br />
+			<textarea id="labels" rows="7" ng-model="form.labelList" ng-model-options="{ debounce: 1000 }" ng-change="updateLabelList()"></textarea><br />
+			<label for="relationshipTypes">Relationship Types:</label><br />
+			<textarea id="relationshipTypes" ng-model="form.relationshipTypeList" ng-model-options="{ debounce: 1000 }" ng-change="updateRelationshipTypeList()"></textarea>
+		</div>
+		<section id="labelRepeater" style="display: inline-block;">
+			<h2>Nodes</h2>
+			<div class="node-type-tab" ng-repeat="lbl in form.labels" style="display: inline-block; vertical-align: top;">
+				<h3>Label: {{lbl}}</h3>
+				<p style="vertical-align: top;"><label>Fields:</label><br /><textarea rows="4" ng-model="form.nodeTypes[lbl].fieldList" ng-model-options="{ debounce: 1000 }" ng-change="updateNodeTypeFieldList(lbl)">{{getFields(lbl)}}</textarea></p>
+				<h4>Structure</h4>
+				<ul>
+					<li ng-repeat="(key, value) in form.nodeTypes[lbl].fields">
+						<div class="fieldEditor"><label>{{key}}:</label><select rows="1" ng-model="value.type"><option ng-repeat="propType in propertyTypes">{{propType}}</option></select>&nbsp;<label>Use for matching?</label><input type="checkbox" ng-model="value.matchOn" /></div>
+					</li>
+				</ul>
+				<h3>Nodes</h3>
+				<ul>
+					<li ng-repeat="node in getNodesByLabel(lbl)">
+						<div style="display: inline-block;">Id# {{node.id}} &raquo; </div>
+						<div style="display: inline-block;" ng-repeat="(fldName, fldValue) in form.nodeTypes[lbl].fields">
+							<label>{{fldName}}:</label>&#160;<input type="text" ng-model="node.properties[fldName]" />&#160;
+						</div>
+						<pre><code>
+MERGE (n:{{lbl}} { {{getMatchingProperties(node)}} }) {{ getSetPropertiesClause(node) }} RETURN n;
+						</code></pre>
+						<pre>{{node}}</pre>
+					</li>
+				</ul>
+			</div>
+		</section>
+	</div>
+</body>
+</html>
